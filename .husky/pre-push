@@ -1,0 +1,32 @@
+#!/bin/sh
+. "$(dirname "$0")/husky.sh"
+
+echo 'cleaning test results'
+rm -rf pre_push_test_results
+
+echo 'running tests'
+dotnet test --collect:"XPlat Code Coverage" --results-directory pre_push_test_results 
+
+FAILED=0
+for FILE in $(find pre_push_test_results -name "coverage.cobertura.xml"); do
+  COVERAGE=$(grep -oP 'line-rate="[\d.]+"' "$FILE" | head -n1 | grep -oP '[\d.]+' | awk '{print int($1 * 100)}') 
+  
+  if [ -z "$COVERAGE" ] || ! [ "$COVERAGE" -eq "$COVERAGE" ] 2>/dev/null; then
+    echo "No fue posible determinar la cobertura en $FILE. Verifica que el archivo sea válido."
+    FAILED=1
+    continue
+  fi
+
+  echo "Archivo: $FILE → Cobertura: $COVERAGE%"
+
+  if [ "$COVERAGE" -lt 20 ]; then
+    echo "❌ Cobertura insuficiente en $FILE ($COVERAGE%). Se requiere al menos 20%."
+    FAILED=1
+  fi
+done
+
+if [ "$FAILED" -eq 1 ]; then
+  exit 1
+else
+  echo "✅ Todos los proyectos cumplen con la cobertura mínima."
+fi
